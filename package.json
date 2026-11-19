@@ -1,0 +1,14 @@
+{
+  "name": "wizard-redteam",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=18.3" },
+  "scripts": {
+    "list": "node redteam.mjs --list",
+    "test": "node redteam.mjs"
+  },
+  "dependencies": {
+    "genlayer-js": "^2.0.0-rc.1"
+  }
+}
