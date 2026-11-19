@@ -28,7 +28,7 @@ const { values: opt } = parseArgs({
   options: {
     address: { type: "string", default: process.env.CONTRACT_ADDRESS },
     rpc: { type: "string", default: process.env.RPC_URL || DEFAULT_RPC },
-    repeat: { type: "string", default: "1" },
+    repeat: { type: "string", default: "2" }, // each prompt is tried twice by default (LLM consensus can differ)
     concurrency: { type: "string", default: "1" },
     only: { type: "string" }, // comma-separated category names or id substrings
     extra: { type: "string" }, // JSON file: [{id, category, text, expect?}]
@@ -47,12 +47,14 @@ const { values: opt } = parseArgs({
     retries: { type: "string", default: "120" },
     interval: { type: "string", default: "3000" },
     list: { type: "boolean", default: false },
+    resume: { type: "string" }, // results-*.jsonl from an interrupted run: skip finished attempts
+    shuffle: { type: "boolean", default: false }, // mix categories so a partial run still covers everything
   },
 });
 
 const MAX_REQUEST = 1000;
 const STATE_FILE = ".wizard-state.json";
-const REPEAT = Math.max(1, parseInt(opt.repeat, 10) || 1);
+const REPEAT = Math.max(1, parseInt(opt.repeat, 10) || 2);
 const CONCURRENCY = Math.max(1, parseInt(opt.concurrency, 10) || 1);
 const RETRIES = parseInt(opt.retries, 10) || 120;
 const INTERVAL = parseInt(opt.interval, 10) || 3000;
@@ -381,13 +383,29 @@ const verdictOf = (r) => {
 };
 
 // ---------- main loop ----------
-const queue = [];
-for (let run = 1; run <= REPEAT; run++) for (const attack of attacks) queue.push({ attack, run });
-const total = queue.length;
+const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+const LOG = opt.resume || `results-${stamp}.jsonl`; // one JSON line per finished attempt (crash-safe)
 const results = [];
+const done = new Set();
+if (opt.resume) {
+  for (const line of fs.readFileSync(opt.resume, "utf8").split("\n")) {
+    if (!line.trim()) continue;
+    try { const r = JSON.parse(line); results.push(r); done.add(`${r.id}#${r.run}`); } catch { /* skip a torn last line */ }
+  }
+  console.log(`Resuming: ${results.length} attempts already in ${opt.resume}`);
+}
+if (opt.shuffle) {
+  let seed = 1337; // deterministic shuffle (mulberry32)
+  const rnd = () => { seed = (seed + 0x6d2b79f5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  for (let i = attacks.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [attacks[i], attacks[j]] = [attacks[j], attacks[i]]; }
+}
+const queue = [];
+for (let run = 1; run <= REPEAT; run++)
+  for (const attack of attacks) if (!done.has(`${attack.id}#${run}`)) queue.push({ attack, run });
+const total = queue.length + results.length;
 console.log(
   `Contract ${ADDRESS} on Studio Dev (${CHAIN_ID})\n` +
-    `${attacks.length} attacks x ${REPEAT} = ${total} attempts, ${CONCURRENCY} worker(s)\n`,
+    `${attacks.length} attacks x ${REPEAT} = ${attacks.length * REPEAT} attempts (${queue.length} to run), ${CONCURRENCY} worker(s); log: ${LOG}\n`,
 );
 
 await Promise.all(
@@ -397,6 +415,7 @@ await Promise.all(
       const r = await runJob(clients[i], account, job);
       r.verdict = verdictOf(r);
       results.push(r);
+      fs.appendFileSync(LOG, JSON.stringify(r) + "\n");
       const mark = r.verdict === "BREACH" ? "✘" : r.verdict === "held" ? "✔" : "?";
       console.log(
         `[${results.length}/${total}] ${mark} ${r.verdict.padEnd(7)} ${r.id}#${r.run} ` +
@@ -445,7 +464,6 @@ if (breaches.length) {
 }
 const md = lines.join("\n");
 
-const stamp = new Date().toISOString().replace(/[:.]/g, "-");
 fs.writeFileSync(`report-${stamp}.json`, JSON.stringify({ address: ADDRESS, chainId: CHAIN_ID, results }, null, 2));
 fs.writeFileSync(`report-${stamp}.md`, md);
 console.log("\n" + md);

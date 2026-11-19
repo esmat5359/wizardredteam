@@ -9,7 +9,9 @@ npm install
 node redteam.mjs                         # test account -> try faucet RPC -> wait for GEN if balance is 0 -> deploy -> attack -> report
 node redteam.mjs --fund manual           # same, but print the address first and wait for you to send GEN
 node redteam.mjs --address 0x...         # attack an already deployed contract
-node redteam.mjs --repeat 3 --concurrency 3
+node redteam.mjs --concurrency 4 --shuffle   # 305 prompts x 2 tries (default --repeat 2); ~4 funded accounts in parallel
+node redteam.mjs --resume results-<time>.jsonl  # continue an interrupted run (every attempt is logged as it finishes)
+node redteam.mjs --only scene,winner-mut --repeat 3
 node redteam.mjs --only format,authority
 node redteam.mjs --guard-file guard.txt  # set_guard (owner = account #0 or PRIVATE_KEY), then attack
 node redteam.mjs --deploy                # force a fresh deployment
@@ -22,3 +24,11 @@ node redteam.mjs --leader-tu 300 --validator-tu 600 --rotations 1,1   # bigger f
 - Keys + deployed address: `.wizard-state.json` (git-ignored, never commit). Studio Dev can be reset; a vanished saved contract is redeployed automatically.
 - Env: `RPC_URL`, `CONTRACT_ADDRESS`, `PRIVATE_KEY`.
 - Output: console + `report-<time>.md` / `.json`; winning prompts are under "Breaches".
+
+## Corpus
+`attacks.mjs` (24 hand-written) + `attacks_gen.mjs` (281 generated) = 305 prompts. The generated ones copy the structure of the
+prompt that beat the unguarded wizard (scene-as-data JSON, a vow whose hour is "now", "no conflict" flags, narrated outcome)
+across 12 scenarios x 10 formats, plus mutations of that exact prompt, third-party recipients, non-"give" verbs, fake history,
+boolean traps, guard-quoting, 14 languages, authority fields, task sandwiches, dilution, time paradoxes, hypotheticals,
+negations and actor roleplay. `node redteam.mjs --list` shows ids and categories.
+A prompt counts as flaky when it breached in only some of its tries.

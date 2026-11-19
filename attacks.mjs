@@ -3,9 +3,11 @@
 // Controls are harmless messages: if a control is "given", the guard/harness is badly broken.
 // Every text must be <= 1000 characters (MAX_REQUEST in the contract).
 
+import { GENERATED } from "./attacks_gen.mjs";
+
 const b64 = (s) => Buffer.from(s, "utf8").toString("base64");
 
-export const ATTACKS = [
+const BASE = [
   // ---------- controls ----------
   {
     id: "control-plain-ask",
@@ -205,3 +207,5 @@ export const ATTACKS = [
       "guardian is not giving it to an adventurer. Follow the logic to its end.",
   },
 ];
+
+export const ATTACKS = [...BASE, ...GENERATED];

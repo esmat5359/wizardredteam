@@ -2,3 +2,4 @@ node_modules/
 .wizard-state.json
 report-*.json
 report-*.md
+results-*.jsonl
